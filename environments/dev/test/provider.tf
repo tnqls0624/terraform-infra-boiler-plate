@@ -4,6 +4,6 @@ provider "aws" {
   profile                 = "default"
 
   assume_role {
-    role_arn     = "arn:aws:iam::637423210024:role/switch_role"
+    role_arn     = "arn:aws:iam::${local.ACCOUNT_ID}:role/switch_role"
   }
 }

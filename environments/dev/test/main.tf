@@ -1,4 +1,4 @@
-module "iapi_vpc" {
+module "test_vpc" {
   source = "../../../modules/vpc"
 
   project = {
@@ -22,9 +22,9 @@ module "iapi_vpc" {
   }
 }
 
-module "iapi_alb" {
+module "test_alb" {
   source     = "../../../modules/alb"
-  depends_on = [module.iapi_vpc]
+  depends_on = [module.test_vpc]
 
   projects = var.projects
 
@@ -37,9 +37,9 @@ module "iapi_alb" {
   }
 
   vpc = {
-    id         = module.iapi_vpc.vpc.id
+    id         = module.test_vpc.vpc.id
     subnet_ids = concat(
-      [for subnet in module.iapi_vpc.subnet.public : subnet.id],
+      [for subnet in module.test_vpc.subnet.public : subnet.id],
     )
   }
 
@@ -52,7 +52,7 @@ module "iapi_alb" {
   }
 }
 
-module "iapi_route53" {
+module "test_route53" {
   source = "../../../modules/route53"
 
   projects = var.projects
@@ -64,17 +64,17 @@ module "iapi_route53" {
   }
 
   vpc = {
-    id = module.iapi_vpc.vpc.id
+    id = module.test_vpc.vpc.id
   }
 
   route53 = {
     name = var.hosted_zone_name
   }
 
-  alb = module.iapi_alb.alb
+  alb = module.test_alb.alb
 }
 
-module "iapi_ecr" {
+module "test_ecr" {
   for_each = var.projects
   source   = "../../../modules/ecr"
 
@@ -83,13 +83,13 @@ module "iapi_ecr" {
   env      = var.env
 }
 
-module "iapi_service_discovery" {
+module "test_service_discovery" {
   source = "../../../modules/service_discovery"
   name   = var.project_name
   env    = var.env
 }
 
-module "iapi_iam" {
+module "test_iam" {
   source = "../../../modules/iam"
   name   = var.project_name
   env    = var.env
@@ -100,7 +100,7 @@ module "iapi_iam" {
   }
 }
 
-module "iapi_security_group" {
+module "test_security_group" {
   source    = "../../../modules/security_group"
   name      = var.project_name
   env       = var.env
@@ -108,23 +108,23 @@ module "iapi_security_group" {
     port = var.container_port
   }
   vpc = {
-    id = module.iapi_vpc.vpc.id
+    id = module.test_vpc.vpc.id
   }
 }
 
-module "iapi_ecs" {
+module "test_ecs" {
   source     = "../../../modules/ecs"
   depends_on = [
-    module.iapi_vpc, module.iapi_alb, module.iapi_ecr, module.iapi_service_discovery, module.iapi_iam,
-    module.iapi_security_group
+    module.test_vpc, module.test_alb, module.test_ecr, module.test_service_discovery, module.test_iam,
+    module.test_security_group
   ]
   for_each = var.projects
 
   name                   = var.project_name
   env                    = var.env
-  namespace_id           = module.iapi_service_discovery.http_namespace_id
-  ecs_task_execution_arn = module.iapi_iam.iam_ecs_task_execution_arn
-  ecs_security_group_id  = module.iapi_security_group.security_group_ecs_id
+  namespace_id           = module.test_service_discovery.http_namespace_id
+  ecs_task_execution_arn = module.test_iam.iam_ecs_task_execution_arn
+  ecs_security_group_id  = module.test_security_group.security_group_ecs_id
 
   project = {
     sub_name           = each.value.sub_name,
@@ -134,12 +134,12 @@ module "iapi_ecs" {
   }
 
   ecr = {
-    name = module.iapi_ecr[each.key].ecr_name
-    url  = module.iapi_ecr[each.key].ecr_url
+    name = module.test_ecr[each.key].ecr_name
+    url  = module.test_ecr[each.key].ecr_url
   }
 
   alb = {
-    target_group_arn = module.iapi_alb.alb[each.key].target_group_arn
+    target_group_arn = module.test_alb.alb[each.key].target_group_arn
   }
 
   aws_config = {
@@ -154,14 +154,14 @@ module "iapi_ecs" {
   }
 
   vpc = {
-    id         = module.iapi_vpc.vpc.id
+    id         = module.test_vpc.vpc.id
     subnet_ids = concat(
-      [for subnet in module.iapi_vpc.subnet.private : subnet.id]
+      [for subnet in module.test_vpc.subnet.private : subnet.id]
     )
   }
 }
 
-module "iapi_s3_code_pipeline" {
+module "test_s3_code_pipeline" {
   source   = "../../../modules/s3"
   for_each = var.projects
 
@@ -183,9 +183,9 @@ module "iapi_s3_code_pipeline" {
   }
 }
 
-module "iapi_code_pipeline" {
+module "test_code_pipeline" {
   source     = "../../../modules/code_pipeline"
-  depends_on = [module.iapi_ecs, module.iapi_iam, module.iapi_s3_code_pipeline]
+  depends_on = [module.test_ecs, module.test_iam, module.test_s3_code_pipeline]
   for_each   = var.projects
 
   name = var.project_name
@@ -193,8 +193,8 @@ module "iapi_code_pipeline" {
 
   repo_owner = var.repo_owner
 
-  iam_code_build_arn    = module.iapi_iam.iam_code_build_arn
-  iam_code_pipeline_arn = module.iapi_iam.iam_code_pipeline_arn
+  iam_code_build_arn    = module.test_iam.iam_code_build_arn
+  iam_code_pipeline_arn = module.test_iam.iam_code_pipeline_arn
 
   project = {
     sub_name           = each.value.sub_name,
@@ -208,30 +208,30 @@ module "iapi_code_pipeline" {
   }
 
   ecr = {
-    name = module.iapi_ecr[each.key].ecr_name
+    name = module.test_ecr[each.key].ecr_name
   }
 
   ecs = {
-    cluster_name = module.iapi_ecs[each.key].ecs_cluster_name
-    service_name = module.iapi_ecs[each.key].ecs_service_name
+    cluster_name = module.test_ecs[each.key].ecs_cluster_name
+    service_name = module.test_ecs[each.key].ecs_service_name
   }
 
   container = {
-    name = module.iapi_ecs[each.key].container_name
+    name = module.test_ecs[each.key].container_name
   }
 
   vpc = {
-    id = module.iapi_vpc.vpc.id
+    id = module.test_vpc.vpc.id
   }
 
   s3 = {
-    bucket_name = module.iapi_s3_code_pipeline[each.key].s3["code-pipeline"].bucket
+    bucket_name = module.test_s3_code_pipeline[each.key].s3["code-pipeline"].bucket
   }
 }
 
-module "iapi_elasticache" {
+module "test_elasticache" {
   source     = "../../../modules/elasticache"
-  depends_on = [module.iapi_vpc]
+  depends_on = [module.test_vpc]
 
   project = {
     name = var.project_name
@@ -246,9 +246,9 @@ module "iapi_elasticache" {
   }
 
   vpc = {
-    id = module.iapi_vpc.vpc.id
+    id = module.test_vpc.vpc.id
     subnet_ids = concat(
-      [for subnet in module.iapi_vpc.subnet.public : subnet.id]
+      [for subnet in module.test_vpc.subnet.public : subnet.id]
     )
   }
 
@@ -258,9 +258,9 @@ module "iapi_elasticache" {
   }
 }
 
-module "iapi_rds" {
+module "test_rds" {
   source     = "../../../modules/rds"
-  depends_on = [module.iapi_vpc]
+  depends_on = [module.test_vpc]
 
   project = {
     name = var.project_name
@@ -279,9 +279,9 @@ module "iapi_rds" {
   }
 
   vpc = {
-    id         = module.iapi_vpc.vpc.id
+    id         = module.test_vpc.vpc.id
     subnet_ids = concat(
-      [for subnet in module.iapi_vpc.subnet.public : subnet.id]
+      [for subnet in module.test_vpc.subnet.public : subnet.id]
     )
   }
 }
